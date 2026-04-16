@@ -23,6 +23,9 @@ env:
   UPSTREAM_REPO: vscode-csharp
   SYNC_WORKFLOW_FILE: .github/workflows/upstream-release-sync.yml
   PACKAGE_WORKFLOW_FILE: .github/workflows/upstream-release-package.yml
+  OFFLINE_PACKAGING_TASK_FILE: tasks/packaging/offlinePackagingTasks.ts
+  DOTNET_RUNTIME_RESOLVER_FILE: src/lsptoolshost/dotnetRuntime/dotnetRuntimeExtensionResolver.ts
+  BLAZOR_DEBUG_PROVIDER_FILE: src/razor/src/blazorDebug/blazorDebugConfigurationProvider.ts
 
 jobs:
   resolve-tag:
@@ -220,6 +223,9 @@ jobs:
             --exclude ".git/" \
             --exclude "${SYNC_WORKFLOW_FILE}" \
             --exclude "${PACKAGE_WORKFLOW_FILE}" \
+            --exclude "${OFFLINE_PACKAGING_TASK_FILE}" \
+            --exclude "${DOTNET_RUNTIME_RESOLVER_FILE}" \
+            --exclude "${BLAZOR_DEBUG_PROVIDER_FILE}" \
             "${temp_dir}/" "${GITHUB_WORKSPACE}/"
 
       - name: Commit synced source
