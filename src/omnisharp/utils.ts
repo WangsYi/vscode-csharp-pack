@@ -170,7 +170,8 @@ export async function requestWorkspaceInformation(server: OmniSharpServer) {
     const response = await server.makeRequest<protocol.WorkspaceInformationResponse>(protocol.Requests.Projects);
     if (response.MsBuild && response.MsBuild.Projects) {
         for (const project of response.MsBuild.Projects) {
-            [project.IsWebProject, project.IsWebAssemblyProject] = isWebProject(project.Path);
+            project.IsWebProject = isWebProject(project.Path);
+
             const isProjectBlazorWebAssemblyProject = await isBlazorWebAssemblyProject(project.Path);
 
             const targetsDotnetCore =

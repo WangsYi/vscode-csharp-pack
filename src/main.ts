@@ -78,7 +78,6 @@ export async function activate(
     if (useOmnisharpServer) {
         requiredPackageIds.push('OmniSharp');
     }
-    requiredPackageIds.push('VSWebAssemblyBridge');
     if (csharpDevkitExtension) {
         requiredPackageIds.push('RoslynCopilot');
     }

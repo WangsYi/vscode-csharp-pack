@@ -36,7 +36,6 @@ export class OmnisharpWorkspaceDebugInformationProvider implements IWorkspaceDeb
                 isWebProject: p.IsWebProject,
                 isBlazorWebAssemblyHosted: p.IsBlazorWebAssemblyHosted,
                 isBlazorWebAssemblyStandalone: p.IsBlazorWebAssemblyStandalone,
-                isWebAssemblyProject: p.IsWebAssemblyProject,
                 solutionPath: null,
             };
         });

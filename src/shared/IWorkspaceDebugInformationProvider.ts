@@ -56,9 +56,4 @@ export interface ProjectDebugInformation {
      * If this is a standalone blazor web assembly project.
      */
     isBlazorWebAssemblyStandalone: boolean;
-
-    /**
-     * If this is a web assembly project.
-     */
-    isWebAssemblyProject: boolean;
 }
