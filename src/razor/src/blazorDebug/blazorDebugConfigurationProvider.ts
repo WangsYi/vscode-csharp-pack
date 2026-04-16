@@ -18,12 +18,16 @@ import { getExtensionPath } from '../../../common';
 import { debugSessionTracker } from '../../../coreclrDebug/provisionalDebugSessionTracker';
 import { getCSharpDevKit } from '../../../utils/getCSharpDevKit';
 import { CSharpExtensionId } from '../../../constants/csharpExtensionId';
-import { DotNetRuntimeVersion } from '../../../lsptoolshost/dotnetRuntime/dotnetRuntimeExtensionResolver';
+import {
+    DotNetRuntimeChannelVersion,
+    DotNetRuntimeVersion,
+} from '../../../lsptoolshost/dotnetRuntime/dotnetRuntimeExtensionResolver';
 import {
     IDotnetAcquireContext,
     IDotnetAcquireResult,
     IDotnetFindPathContext,
 } from '../../../lsptoolshost/dotnetRuntime/dotnetRuntimeExtensionApi';
+import { getDotnetInfo } from '../../../shared/utils/getDotnetInfo';
 import { IDisposable } from '@microsoft/servicehub-framework';
 import { Observer } from '@microsoft/servicehub-framework/js/src/jsonRpc/Observer';
 import { EventEmitter } from 'events';
@@ -381,7 +385,7 @@ export class BlazorDebugConfigurationProvider implements vscode.DebugConfigurati
     private static async acquireDotnetPath(): Promise<string> {
         const findPathRequest: IDotnetFindPathContext = {
             acquireContext: {
-                version: DotNetRuntimeVersion,
+                version: DotNetRuntimeChannelVersion,
                 requestingExtensionId: CSharpExtensionId,
                 architecture: process.arch,
                 mode: 'aspnetcore',
@@ -396,8 +400,14 @@ export class BlazorDebugConfigurationProvider implements vscode.DebugConfigurati
                 findPathRequest
             );
             if (acquireResult === undefined) {
+                const globalDotnetPath = await BlazorDebugConfigurationProvider.tryGetGlobalDotnetPath();
+                if (globalDotnetPath) {
+                    return globalDotnetPath;
+                }
+            }
+            if (acquireResult === undefined) {
                 const acquireContext: IDotnetAcquireContext = {
-                    version: DotNetRuntimeVersion.substring(0, DotNetRuntimeVersion.lastIndexOf('.')),
+                    version: DotNetRuntimeChannelVersion,
                     requestingExtensionId: CSharpExtensionId,
                     mode: 'aspnetcore',
                 };
@@ -414,6 +424,15 @@ export class BlazorDebugConfigurationProvider implements vscode.DebugConfigurati
         }
 
         return process.platform === 'win32' ? 'dotnet.exe' : 'dotnet';
+    }
+
+    private static async tryGetGlobalDotnetPath(): Promise<string | undefined> {
+        try {
+            const dotnetInfo = await getDotnetInfo([]);
+            return dotnetInfo.CliPath;
+        } catch {
+            return undefined;
+        }
     }
 
     private static async launchVsWebAssemblyBridge(urlStr: string): Promise<[string, number, number]> {

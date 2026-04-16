@@ -12,7 +12,7 @@ on:
         type: string
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: upstream-release-package-${{ github.ref }}
@@ -22,6 +22,16 @@ jobs:
   package:
     runs-on: ubuntu-latest
     steps:
+      - name: Validate version tag for push trigger
+        if: github.event_name == 'push'
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [[ ! "${REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Tag ${REF_NAME} is not a supported version tag, skipping packaging."
+            exit 1
+          fi
+
       - name: Check out requested ref
         uses: actions/checkout@v4
         with:
@@ -45,11 +55,86 @@ jobs:
       - name: Build offline VSIX packages
         run: npm run vsix:offline:package
 
-      - name: Upload VSIX artifacts
+      - name: Upload win32-x64 artifact
         uses: actions/upload-artifact@v4
         with:
-          name: offline-vsix-${{ github.ref_name || 'manual' }}
+          name: csharp-win32-x64-${{ github.ref_name || 'manual' }}
           path: |
+            vsix/*-win32-x64-*.vsix
+            vsix/*-win32-x64-*.manifest
+          if-no-files-found: error
+
+      - name: Upload win32-arm64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: csharp-win32-arm64-${{ github.ref_name || 'manual' }}
+          path: |
+            vsix/*-win32-arm64-*.vsix
+            vsix/*-win32-arm64-*.manifest
+          if-no-files-found: error
+
+      - name: Upload linux-x64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: csharp-linux-x64-${{ github.ref_name || 'manual' }}
+          path: |
+            vsix/*-linux-x64-*.vsix
+            vsix/*-linux-x64-*.manifest
+          if-no-files-found: error
+
+      - name: Upload linux-arm64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: csharp-linux-arm64-${{ github.ref_name || 'manual' }}
+          path: |
+            vsix/*-linux-arm64-*.vsix
+            vsix/*-linux-arm64-*.manifest
+          if-no-files-found: error
+
+      - name: Upload alpine-x64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: csharp-alpine-x64-${{ github.ref_name || 'manual' }}
+          path: |
+            vsix/*-alpine-x64-*.vsix
+            vsix/*-alpine-x64-*.manifest
+          if-no-files-found: error
+
+      - name: Upload alpine-arm64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: csharp-alpine-arm64-${{ github.ref_name || 'manual' }}
+          path: |
+            vsix/*-alpine-arm64-*.vsix
+            vsix/*-alpine-arm64-*.manifest
+          if-no-files-found: error
+
+      - name: Upload darwin-x64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: csharp-darwin-x64-${{ github.ref_name || 'manual' }}
+          path: |
+            vsix/*-darwin-x64-*.vsix
+            vsix/*-darwin-x64-*.manifest
+          if-no-files-found: error
+
+      - name: Upload darwin-arm64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: csharp-darwin-arm64-${{ github.ref_name || 'manual' }}
+          path: |
+            vsix/*-darwin-arm64-*.vsix
+            vsix/*-darwin-arm64-*.manifest
+          if-no-files-found: error
+
+      - name: Publish GitHub release assets
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          make_latest: true
+          files: |
             vsix/*.vsix
             vsix/*.manifest
-          if-no-files-found: error
+          fail_on_unmatched_files: true

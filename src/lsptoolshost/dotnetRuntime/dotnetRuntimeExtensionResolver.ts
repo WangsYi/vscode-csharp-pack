@@ -20,11 +20,13 @@ import {
 } from './dotnetRuntimeExtensionApi';
 import { DotNetRuntimeExtensionId } from '../../checkDotNetRuntimeExtensionVersion';
 import { getCSharpDevKit } from '../../utils/getCSharpDevKit';
+import { getDotnetInfo } from '../../shared/utils/getDotnetInfo';
 
 const DotNetMajorVersion = '10';
 const DotNetMinorVersion = '0';
 const DotNetPatchVersion = '5';
 export const DotNetRuntimeVersion = `${DotNetMajorVersion}.${DotNetMinorVersion}.${DotNetPatchVersion}`;
+export const DotNetRuntimeChannelVersion = `${DotNetMajorVersion}.${DotNetMinorVersion}`;
 
 /**
  * Resolves the dotnet runtime for a server executable from given options and the dotnet runtime VSCode extension.
@@ -52,10 +54,12 @@ export class DotnetRuntimeExtensionResolver implements IHostExecutableResolver {
         const runtimeMode: DotnetInstallMode = usingDevkit ? 'aspnetcore' : 'runtime';
         const extensionArchitecture = (await this.getArchitectureFromTargetPlatform()) ?? process.arch;
 
-        this.channel.appendLine(`Locating .NET runtime version ${DotNetRuntimeVersion}`);
+        this.channel.appendLine(
+            `Locating .NET runtime version ${DotNetRuntimeVersion} or newer on channel ${DotNetRuntimeChannelVersion}`
+        );
         const findPathRequest: IDotnetFindPathContext = {
             acquireContext: {
-                version: DotNetRuntimeVersion,
+                version: DotNetRuntimeChannelVersion,
                 requestingExtensionId: CSharpExtensionId,
                 architecture: extensionArchitecture,
                 mode: runtimeMode,
@@ -77,6 +81,14 @@ export class DotnetRuntimeExtensionResolver implements IHostExecutableResolver {
             'dotnet.findPath',
             findPathRequest
         );
+        if (acquireResult === undefined) {
+            const globalDotnetPath = await this.tryGetGlobalDotnetPath();
+            if (globalDotnetPath) {
+                this.channel.appendLine(`Using global dotnet on PATH: ${globalDotnetPath}`);
+                acquireResult = { dotnetPath: globalDotnetPath };
+            }
+        }
+
         if (acquireResult === undefined) {
             this.channel.appendLine(
                 `Did not find .NET ${DotNetRuntimeVersion} on path, falling back to acquire runtime via ${DotNetRuntimeExtensionId}`
@@ -152,10 +164,8 @@ export class DotnetRuntimeExtensionResolver implements IHostExecutableResolver {
     private async acquireRuntime(mode: DotnetInstallMode): Promise<IDotnetAcquireResult> {
         // The runtime extension doesn't support specifying a patch versions in the acquire API, so we only use major.minor here.
         // That is generally OK, as acquisition will always acquire the latest patch version.
-        const dotnetAcquireVersion = `${DotNetMajorVersion}.${DotNetMinorVersion}`;
-
         const acquireContext: IDotnetAcquireContext = {
-            version: dotnetAcquireVersion,
+            version: DotNetRuntimeChannelVersion,
             requestingExtensionId: CSharpExtensionId,
             mode: mode,
         };
@@ -188,6 +198,17 @@ export class DotnetRuntimeExtensionResolver implements IHostExecutableResolver {
         });
 
         return acquireResult;
+    }
+
+    private async tryGetGlobalDotnetPath(): Promise<string | undefined> {
+        try {
+            const dotnetInfo = await getDotnetInfo([]);
+            return dotnetInfo.CliPath;
+        } catch (error) {
+            const message = error instanceof Error ? error.message : `${error}`;
+            this.channel.appendLine(`Global dotnet probe failed: ${message}`);
+            return undefined;
+        }
     }
 
     private async getArchitectureFromTargetPlatform(): Promise<string | undefined> {
