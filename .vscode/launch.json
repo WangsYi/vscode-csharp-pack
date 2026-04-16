@@ -62,8 +62,7 @@
             ],
             "env": {
                 "CODE_EXTENSIONS_PATH": "${workspaceRoot}",
-                "TEST_FILE_FILTER": "${file}",
-                "RoslynWaiterEnabled": "true"
+                "TEST_FILE_FILTER": "${file}"
             },
             "sourceMaps": true,
             "outFiles": ["${workspaceRoot}/dist/*.js", "${workspaceRoot}/out/test/**/*.js"],
@@ -91,7 +90,6 @@
             "env": {
                 "CODE_EXTENSIONS_PATH": "${workspaceRoot}",
                 "TEST_FILE_FILTER": "${file}",
-                "RoslynWaiterEnabled": "true"
             },
             "sourceMaps": true,
             "outFiles": ["${workspaceRoot}/dist/*.js", "${workspaceRoot}/out/test/**/*.js"],
