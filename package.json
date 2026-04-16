@@ -103,7 +103,8 @@
     "updateVersionForStableRelease": "npx ts-node tasks/snap/updateVersionForStableRelease.ts",
     "verifyVsix": "npx ts-node tasks/signing/verifyVsix.ts",
     "vscode:prepublish": "npm run package",
-    "vsix:release:package": "npx ts-node tasks/packaging/vsixReleasePackage.ts"
+    "vsix:release:package": "npx ts-node tasks/packaging/vsixReleasePackage.ts",
+    "vsix:offline:package": "npm run installDependenciesClean && npm run vsix:release:package"
   },
   "extensionDependencies": [
     "ms-dotnettools.vscode-dotnet-runtime"

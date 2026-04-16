@@ -1,0 +1,164 @@
+name: Sync Upstream Release And Package Offline VSIX
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      upstream_tag:
+        description: 'Optional upstream tag to sync, for example v2.95.0'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: upstream-release-sync
+  cancel-in-progress: false
+
+env:
+  TARGET_BRANCH: main
+  UPSTREAM_OWNER: dotnet
+  UPSTREAM_REPO: vscode-csharp
+  WORKFLOW_FILE: .github/workflows/upstream-release-sync.yml
+
+jobs:
+  resolve-release:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.resolve.outputs.should_run }}
+      upstream_tag: ${{ steps.resolve.outputs.upstream_tag }}
+    steps:
+      - name: Resolve upstream release
+        id: resolve
+        uses: actions/github-script@v7
+        env:
+          INPUT_TAG: ${{ github.event.inputs.upstream_tag }}
+          UPSTREAM_OWNER: ${{ env.UPSTREAM_OWNER }}
+          UPSTREAM_REPO: ${{ env.UPSTREAM_REPO }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const inputTag = process.env.INPUT_TAG?.trim();
+            let upstreamTag = inputTag;
+
+            if (!upstreamTag) {
+              const releases = await github.paginate(github.rest.repos.listReleases, {
+                owner: process.env.UPSTREAM_OWNER,
+                repo: process.env.UPSTREAM_REPO,
+                per_page: 100,
+              });
+
+              const latestPublished = releases
+                .filter((release) => !release.draft && release.published_at)
+                .sort((a, b) => new Date(b.published_at) - new Date(a.published_at))[0];
+
+              if (!latestPublished) {
+                core.setFailed('No published upstream release was found.');
+                return;
+              }
+
+              upstreamTag = latestPublished.tag_name;
+              core.info(`Latest upstream release: ${upstreamTag} (${latestPublished.published_at})`);
+            } else {
+              core.info(`Using manually provided upstream tag: ${upstreamTag}`);
+            }
+
+            try {
+              await github.rest.git.getRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `tags/${upstreamTag}`,
+              });
+
+              core.info(`Tag ${upstreamTag} already exists in this repository, skipping.`);
+              core.setOutput('should_run', 'false');
+            } catch (error) {
+              if (error.status !== 404) {
+                throw error;
+              }
+
+              core.setOutput('should_run', 'true');
+            }
+
+            core.setOutput('upstream_tag', upstreamTag);
+
+  sync-and-package:
+    needs: resolve-release
+    if: needs.resolve-release.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out target branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_BRANCH }}
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.x'
+          cache: npm
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: msbuild/global.json
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync workspace to upstream tag
+        env:
+          UPSTREAM_TAG: ${{ needs.resolve-release.outputs.upstream_tag }}
+        run: |
+          git fetch "https://github.com/${UPSTREAM_OWNER}/${UPSTREAM_REPO}.git" --tags --force
+          git rev-parse --verify "refs/tags/${UPSTREAM_TAG}^{commit}" >/dev/null
+
+          temp_dir="$(mktemp -d)"
+          git archive "refs/tags/${UPSTREAM_TAG}" | tar -xf - -C "${temp_dir}"
+
+          rsync -a --delete \
+            --exclude ".git/" \
+            --exclude "${WORKFLOW_FILE}" \
+            "${temp_dir}/" "${GITHUB_WORKSPACE}/"
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build offline VSIX packages
+        run: npm run vsix:offline:package
+
+      - name: Commit synced source
+        id: commit
+        env:
+          UPSTREAM_TAG: ${{ needs.resolve-release.outputs.upstream_tag }}
+        run: |
+          if [ -z "$(git status --short)" ]; then
+            echo "created_commit=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git add -A
+          git commit -m "chore: sync upstream release ${UPSTREAM_TAG}"
+          git push origin "HEAD:${TARGET_BRANCH}"
+          echo "created_commit=true" >> "$GITHUB_OUTPUT"
+
+      - name: Push upstream tag to this repository
+        env:
+          UPSTREAM_TAG: ${{ needs.resolve-release.outputs.upstream_tag }}
+        run: |
+          git tag -f "${UPSTREAM_TAG}"
+          git push origin "refs/tags/${UPSTREAM_TAG}"
+
+      - name: Upload VSIX artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: offline-vsix-${{ needs.resolve-release.outputs.upstream_tag }}
+          path: |
+            vsix/*.vsix
+            vsix/*.manifest
+          if-no-files-found: error
